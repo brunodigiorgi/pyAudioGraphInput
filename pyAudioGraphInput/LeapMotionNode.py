@@ -3,58 +3,91 @@ import pyAudioGraph as ag
 import numpy as np
 
 
+class LMVector:
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.x = ag.OutWire(parent)
+        self.y = ag.OutWire(parent)
+        self.z = ag.OutWire(parent)
+        self.out_wires = [self.x, self.y, self.z]
+        self.array = np.zeros((3,), dtype=np.float32)
+
+    def set_data(self, other):
+        self.x.set_data(other.x)
+        self.y.set_data(other.y)
+        self.z.set_data(other.z)
+        self.array[0] = other.x
+        self.array[1] = other.y
+        self.array[2] = other.z
+
+
+class LMBone:
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.prev_joint = LMVector(parent)
+        self.next_joint = LMVector(parent)
+        self.out_wires = []
+        self.out_wires.extend(self.prev_joint.out_wires + self.next_joint.out_wires)
+
+
+class LMFinger:
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.bones = [LMBone(parent) for _ in range(lmc.NBONES)]
+        self.out_wires = []
+        for b in self.bones:
+            self.out_wires.extend(b.out_wires)
+
+
+class LMHand:
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.is_valid = ag.OutWire(parent)
+        self.detected = ag.OutWire(parent)
+        self.palm_position = LMVector(parent)
+        self.palm_velocity = LMVector(parent)
+        self.palm_normal = LMVector(parent)
+        self.palm_position_normalized = LMVector(parent)
+        self.fingers = [LMFinger(parent) for _ in range(lmc.NFINGERS)]
+
+        self.out_wires = [self.is_valid, self.detected]
+        self.out_wires.extend(self.palm_position.out_wires + self.palm_velocity.out_wires)
+        self.out_wires.extend(self.palm_normal.out_wires + self.palm_position_normalized.out_wires)
+        for f in self.fingers:
+            self.out_wires.extend(f.out_wires)
+
+
 class LeapMotionNode(ag.Node):
 
     def __init__(self, world):
         super().__init__(world)
 
-        self.w_rhand = ag.OutWire(self)
-        self.w_rhand_pos = [ag.OutWire(self) for i in range(3)]
-        self.w_rhand_vel = [ag.OutWire(self) for i in range(3)]
-        self.w_rhand_angle = ag.OutWire(self)
-        self.w_rhand_fing2_angle = ag.OutWire(self)
+        self.w_hands = [LMHand(self) for _ in range(lmc.NHANDS)]
+        self.w_connected = ag.OutWire(self)
+        self.w_has_focus = ag.OutWire(self)
+        self.out_wires = [self.w_connected, self.w_has_focus]
+        for h in self.w_hands:
+            self.out_wires.extend(h.out_wires)
+
         self.controller = lmc.LMController()
-        self.connected = False
-        self.initialized = False
-
-        self.out_wires.extend([self.w_rhand] + self.w_rhand_pos + self.w_rhand_vel + [self.w_rhand_angle, self.w_rhand_fing2_angle])
-
-    def on_init(self):
-        self.initialized = True
-
-    def on_connect(self):
-        self.connected = True
-
-    def on_disconnect(self):
-        self.connected = False
-
-    def on_exit(self):
-        return
 
     def calc_func(self):
+        self.w_connected.set_data(self.controller.isConnected())
+        self.w_has_focus.set_data(self.controller.hasFocus())
+
         hands = self.controller.frame()
-        self.w_rhand.set_data(0)
-        if(hands[1].detected):
-            self.w_rhand.set_data(1)
-            h = hands[1]
-            self.w_rhand_pos[0].set_data(h.palm_position_normalized.x)
-            self.w_rhand_pos[1].set_data(h.palm_position_normalized.y)
-            self.w_rhand_pos[2].set_data(h.palm_position_normalized.z)
-
-            palm_angle = np.arctan2(h.palm_normal.x, h.palm_normal.y)
-
-            # renormalization
-            if(palm_angle < 0):
-                palm_angle += 2 * np.pi
-            palm_angle = (palm_angle - 3.3) * .5
-            self.w_rhand_angle.set_data(palm_angle)
-
-            bone = h.fingers[2].bones[3]
-            d = (bone.next_joint.array - bone.prev_joint.array)
-            m_angle = np.arctan2(d[2], d[1])
-
-            # renormalization
-            if(m_angle < 0):
-                m_angle += 2 * np.pi
-            m_angle = (4.50 - m_angle)
-            self.w_rhand_fing2_angle.set_data(m_angle)
+        for sh, oh in zip(self.w_hands, hands):
+            sh.is_valid.set_data(oh.is_valid)
+            sh.detected.set_data(oh.detected)
+            sh.palm_position.set_data(oh.palm_position)
+            sh.palm_velocity.set_data(oh.palm_velocity)
+            sh.palm_normal.set_data(oh.palm_normal)
+            sh.palm_position_normalized.set_data(oh.palm_position_normalized)
+            for sf, of in zip(sh.fingers, oh.fingers):
+                for sb, ob in zip(sf.bones, of.bones):
+                    sb.prev_joint.set_data(ob.prev_joint)
+                    sb.next_joint.set_data(ob.next_joint)
