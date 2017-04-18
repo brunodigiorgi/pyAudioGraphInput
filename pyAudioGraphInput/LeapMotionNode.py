@@ -10,7 +10,6 @@ class LMVector:
         self.x = ag.OutWire(parent)
         self.y = ag.OutWire(parent)
         self.z = ag.OutWire(parent)
-        self.out_wires = [self.x, self.y, self.z]
         self.array = np.zeros((3,), dtype=np.float32)
 
     def set_data(self, other):
@@ -28,8 +27,6 @@ class LMBone:
         self.parent = parent
         self.prev_joint = LMVector(parent)
         self.next_joint = LMVector(parent)
-        self.out_wires = []
-        self.out_wires.extend(self.prev_joint.out_wires + self.next_joint.out_wires)
 
 
 class LMFinger:
@@ -37,9 +34,6 @@ class LMFinger:
     def __init__(self, parent):
         self.parent = parent
         self.bones = [LMBone(parent) for _ in range(lmc.NBONES)]
-        self.out_wires = []
-        for b in self.bones:
-            self.out_wires.extend(b.out_wires)
 
 
 class LMHand:
@@ -54,12 +48,6 @@ class LMHand:
         self.palm_position_normalized = LMVector(parent)
         self.fingers = [LMFinger(parent) for _ in range(lmc.NFINGERS)]
 
-        self.out_wires = [self.is_valid, self.detected]
-        self.out_wires.extend(self.palm_position.out_wires + self.palm_velocity.out_wires)
-        self.out_wires.extend(self.palm_normal.out_wires + self.palm_position_normalized.out_wires)
-        for f in self.fingers:
-            self.out_wires.extend(f.out_wires)
-
 
 class LeapMotionNode(ag.Node):
 
@@ -69,10 +57,6 @@ class LeapMotionNode(ag.Node):
         self.w_hands = [LMHand(self) for _ in range(lmc.NHANDS)]
         self.w_connected = ag.OutWire(self)
         self.w_has_focus = ag.OutWire(self)
-        self.out_wires = [self.w_connected, self.w_has_focus]
-        for h in self.w_hands:
-            self.out_wires.extend(h.out_wires)
-
         self.controller = lmc.LMController()
 
     def calc_func(self):

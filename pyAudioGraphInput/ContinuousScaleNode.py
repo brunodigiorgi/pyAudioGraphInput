@@ -16,11 +16,7 @@ class ContinuousScaleNode(ag.Node):
         self.w_in_snap = ag.InWire(self)
         self.w_in_scale = ag.ObjInWire(self, list(range(12)))
         self.w_f0 = ag.OutWire(self)
-
         self.prev_scale = []
-
-        self.in_wires.extend([self.w_in, self.w_in_snap, self.w_in_scale])
-        self.out_wires.append(self.w_f0)
 
     def set_A440(self, A440):
         self.A440 = A440
